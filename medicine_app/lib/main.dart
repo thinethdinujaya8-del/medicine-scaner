@@ -1,23 +1,19 @@
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import 'camera_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final cameras = await availableCameras();
-  runApp(MedicineApp(cameras: cameras));
+  runApp(const MedicineApp());
 }
 
 class MedicineApp extends StatelessWidget {
-  final List<CameraDescription> cameras;
-
-  const MedicineApp({super.key, required this.cameras});
+  const MedicineApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: CameraScreen(cameras: cameras),
+    return const MaterialApp(
+      home: CameraScreen(),
     );
   }
 }

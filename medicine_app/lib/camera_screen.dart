@@ -1,42 +1,78 @@
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class CameraScreen extends StatefulWidget {
-  final List<CameraDescription> cameras;
-
-  const CameraScreen({super.key, required this.cameras});
+  const CameraScreen({super.key});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  late CameraController _controller;
-  late Future<void> _initializeControllerFuture;
+  CameraController? _controller;
+  Future<void>? _initializeControllerFuture;
+  bool _isInitializing = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    if (!kIsWeb) {
+      _initializeCamera();
+    }
+  }
 
-    if (widget.cameras.isEmpty) {
-      _controller = CameraController(
-        const CameraDescription(
-          name: 'No Camera',
-          lensDirection: CameraLensDirection.back,
-          sensorOrientation: 0,
-        ),
-        ResolutionPreset.medium,
+  Future<void> _initializeCamera() async {
+    if (_isInitializing) {
+      return;
+    }
+
+    setState(() {
+      _isInitializing = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final cameras = await availableCameras();
+      if (!mounted) {
+        return;
+      }
+
+      if (cameras.isEmpty) {
+        throw Exception('No camera is available on this device.');
+      }
+
+      final preferredCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
       );
-      _initializeControllerFuture = Future.error('No camera available');
-    } else {
-      _controller = CameraController(widget.cameras.first, ResolutionPreset.medium);
-      _initializeControllerFuture = _controller.initialize();
+
+      _controller = CameraController(preferredCamera, ResolutionPreset.medium);
+      _initializeControllerFuture = _controller!.initialize();
+      await _initializeControllerFuture;
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = kIsWeb
+            ? 'Camera access needs to be started from a browser interaction. Tap the button below and allow camera access.'
+            : 'Unable to start the camera. $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -44,20 +80,35 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Camera Preview')),
-      body: FutureBuilder<void>(
-        future: _initializeControllerFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            if (snapshot.hasError || widget.cameras.isEmpty) {
-              return const Center(
-                child: Text('No camera is available on this device.'),
-              );
-            }
-            return CameraPreview(_controller);
-          }
+      body: Center(
+        child: _controller != null && _controller!.value.isInitialized
+            ? CameraPreview(_controller!)
+            : _buildStatusView(),
+      ),
+    );
+  }
 
-          return const Center(child: CircularProgressIndicator());
-        },
+  Widget _buildStatusView() {
+    if (_isInitializing) {
+      return const CircularProgressIndicator();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _errorMessage ?? 'Tap the button to start the camera preview.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _initializeCamera,
+            icon: const Icon(Icons.camera_alt),
+            label: const Text('Start Camera'),
+          ),
+        ],
       ),
     );
   }
